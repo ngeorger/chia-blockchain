@@ -2,7 +2,6 @@ from typing import List
 
 from blspy import G2Element
 
-from chia.types.condition_opcodes import ConditionOpcode
 from chia.types.blockchain_format.program import INFINITE_COST
 from chia.types.coin_spend import CoinSpend
 from chia.full_node.mempool_check_conditions import get_name_puzzle_conditions
@@ -24,11 +23,11 @@ def compute_coin_hints(cs: CoinSpend) -> List[bytes]:
         height=DEFAULT_CONSTANTS.SOFT_FORK_HEIGHT,
     )
     h_list = []
-    for npc in npc_result.npc_list:
-        for opcode, conditions in npc.conditions:
-            if opcode == ConditionOpcode.CREATE_COIN:
-                for condition in conditions:
-                    if len(condition.vars) > 2 and condition.vars[2] != b"":
-                        h_list.append(condition.vars[2])
+    assert npc_result is not None
+    assert npc_result.conds is not None
+    for spend in npc_result.conds.spends:
+        for _, _, hint in spend.create_coin:
+            if hint != b"":
+                h_list.append(hint)
 
     return h_list
