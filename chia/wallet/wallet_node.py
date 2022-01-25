@@ -496,6 +496,7 @@ class WalletNode:
     async def state_update_received(self, request: wallet_protocol.CoinStateUpdate, peer: WSChiaConnection):
         assert self.wallet_state_manager is not None
         assert self.server is not None
+        self.log.info(f"request: {request}")
         async with self.new_peak_lock:
             async with self.wallet_state_manager.lock:
                 if self.is_trusted(peer):
@@ -912,29 +913,28 @@ class WalletNode:
                         pool_state = None
                         try:
                             pool_state = solution_to_pool_state(launcher_spend)
+                            pool_wallet = await PoolWallet.create(
+                                self.wallet_state_manager,
+                                self.wallet_state_manager.main_wallet,
+                                child.coin.name(),
+                                [launcher_spend],
+                                child.spent_height,
+                                False,
+                                "pool_wallet",
+                            )
+                            await pool_wallet.apply_state_transitions(launcher_spend, block.height)
+                            pool_added_coin = launcher_spend.additions()[0]
+                            await self.wallet_state_manager.coin_added(
+                                pool_added_coin,
+                                block.height,
+                                [],
+                                uint32(pool_wallet.wallet_id),
+                                WalletType(pool_wallet.type()),
+                            )
                         except Exception as e:
                             self.log.debug(f"Not a pool wallet launcher {e}")
                             continue
-                        assert pool_state is not None  # fails for non-pool singletons
-                        assert child.spent_height is not None
-                        pool_wallet = await PoolWallet.create(
-                            self.wallet_state_manager,
-                            self.wallet_state_manager.main_wallet,
-                            child.coin.name(),
-                            [launcher_spend],
-                            child.spent_height,
-                            False,
-                            "pool_wallet",
-                        )
-                        await pool_wallet.apply_state_transitions(launcher_spend, block.height)
-                        pool_added_coin = launcher_spend.additions()[0]
-                        await self.wallet_state_manager.coin_added(
-                            pool_added_coin,
-                            block.height,
-                            [],
-                            uint32(pool_wallet.wallet_id),
-                            WalletType(pool_wallet.type()),
-                        )
+
 
         await self.update_ui()
 
