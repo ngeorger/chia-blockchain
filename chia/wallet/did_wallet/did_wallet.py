@@ -579,7 +579,7 @@ class DIDWallet:
             name=token_bytes(),
             memos=list(spend_bundle.get_memos().items()),
         )
-        await self.standard_wallet.push_transaction(did_record)
+
         return spend_bundle
 
     # This is used to cash out, or update the id_list
@@ -715,7 +715,7 @@ class DIDWallet:
             name=token_bytes(),
             memos=list(spend_bundle.get_memos().items()),
         )
-        await self.standard_wallet.push_transaction(did_record)
+
         if filename is not None:
             f = open(filename, "w")
             f.write(self.get_my_DID())
