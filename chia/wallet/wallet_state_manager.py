@@ -31,6 +31,8 @@ from chia.util.errors import Err
 from chia.util.ints import uint32, uint64, uint128, uint8
 from chia.util.db_synchronous import db_synchronous_on
 from chia.wallet.cat_wallet.cat_utils import match_cat_puzzle, construct_cat_puzzle
+from chia.wallet.nft_wallet.nft_puzzles import match_nft_puzzle
+from chia.wallet.nft_wallet.nft_wallet import NFTWalletInfo
 from chia.wallet.cat_wallet.cat_wallet import CATWallet
 from chia.wallet.cat_wallet.cat_constants import DEFAULT_CATS
 from chia.wallet.derivation_record import DerivationRecord
@@ -584,7 +586,7 @@ class WalletStateManager:
                 removals[coin.name()] = coin
         return removals
 
-    async def fetch_parent_and_check_for_cat(self, peer, coin_state) -> Tuple[Optional[uint32], Optional[WalletType]]:
+    async def determine_coin_type(self, peer, coin_state) -> Tuple[Optional[uint32], Optional[WalletType]]:
         if self.is_pool_reward(coin_state.created_height, coin_state.coin.parent_coin_info) or self.is_farmer_reward(
             coin_state.created_height, coin_state.coin.parent_coin_info
         ):
@@ -631,6 +633,21 @@ class WalletStateManager:
                     wallet_type = WalletType(cat_wallet.type())
                     self.state_changed("wallet_created")
 
+        else:
+            matched, curried_args = match_nft_puzzle(Program.from_bytes(bytes(cs.puzzle_reveal)))
+            breakpoint()
+            if matched:
+                NFT_MOD_HASH, singleton_struct, current_owner_did, nft_transfer_program_hash = curried_args
+                hint_list = cs.hints()
+                breakpoint()
+                for hint in hint_list:
+                    for wallet_info in await self.get_all_wallet_info_entries():
+                        if wallet_info.type == WalletType.NFT:
+                            nft_wallet_info = NFTWalletInfo.from_json_dict(json.loads(wallet_info.data))
+                            if nft_wallet_info.my_did == hint:
+                                wallet_id = nft_wallet_info.id
+                                wallet_type = WalletType.NFT
+
         return wallet_id, wallet_type
 
     async def new_coin_state(
@@ -656,7 +673,6 @@ class WalletStateManager:
         if fork_height is not None and current_height is not None and fork_height != current_height - 1:
             # This only applies to trusted mode
             await self.reorg_rollback(fork_height)
-
         for coin_state_idx, coin_state in enumerate(coin_states):
             info = await self.get_wallet_id_for_puzzle_hash(coin_state.coin.puzzle_hash)
             local_record: Optional[WalletCoinRecord] = await self.coin_store.get_coin_record(coin_state.coin.name())
@@ -667,11 +683,16 @@ class WalletStateManager:
             wallet_type = None
             if info is not None:
                 wallet_id, wallet_type = info
+                if wallet_type == WalletType.NFT:
+                    breakpoint()
             elif local_record is not None:
                 wallet_id = uint32(local_record.wallet_id)
                 wallet_type = local_record.wallet_type
             elif coin_state.created_height is not None:
-                wallet_id, wallet_type = await self.fetch_parent_and_check_for_cat(peer, coin_state)
+                wallet_id, wallet_type = await self.determine_coin_type(peer, coin_state)
+                breakpoint()
+                # if wallet_id is None:
+                #     wallet_id, wallet_type = await self.fetch_parent_and_check_for_nft(peer, coin_state)
 
             if wallet_id is None or wallet_type is None:
                 self.log.info(f"No wallet for coin state: {coin_state}")
