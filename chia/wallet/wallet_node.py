@@ -496,7 +496,9 @@ class WalletNode:
     async def state_update_received(self, request: wallet_protocol.CoinStateUpdate, peer: WSChiaConnection):
         assert self.wallet_state_manager is not None
         assert self.server is not None
-        self.log.info(f"request: {request}")
+        for coin in request.items:
+            self.log.info(f"request coin: {coin.coin.name()}{coin}")
+
         async with self.new_peak_lock:
             async with self.wallet_state_manager.lock:
                 if self.is_trusted(peer):
@@ -515,7 +517,7 @@ class WalletNode:
 
                         # We need to check the hints and see if there is a new CAT sent to us, so we can create
                         # a new CAT wallet
-                        wallet_id, wallet_type = await self.wallet_state_manager.fetch_parent_and_check_for_cat(
+                        wallet_id, wallet_type = await self.wallet_state_manager.determine_coin_type(
                             peer, coin_state
                         )
 
